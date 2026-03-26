@@ -21,6 +21,8 @@ import (
 
 // initApplicationImages copies the images from the embedded directory to the storage backend
 // and returns a map containing the detected file extensions in the application-images directory.
+//
+//nolint:gocognit
 func initApplicationImages(ctx context.Context, fileStorage storage.FileStorage) (map[string]string, error) {
 	// Previous versions of images
 	// If these are found, they are deleted
