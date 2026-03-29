@@ -5,9 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
 	"github.com/golang-migrate/migrate/v4/database"
+	cockroachMigrate "github.com/golang-migrate/migrate/v4/database/cockroachdb"
 	postgresMigrate "github.com/golang-migrate/migrate/v4/database/postgres"
 	sqliteMigrate "github.com/golang-migrate/migrate/v4/database/sqlite3"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
@@ -79,6 +81,16 @@ func newMigrationDriver(sqlDb *sql.DB, dbProvider common.DbProvider) (driver dat
 			NoTxWrap: true,
 		})
 	case common.DbProviderPostgres:
+		isCockroach, detectErr := isCockroachDB(sqlDb)
+		if detectErr != nil {
+			slog.Warn("Failed to detect database flavor via SELECT version(), defaulting to Postgres migration driver", slog.Any("error", detectErr))
+		}
+
+		if isCockroach {
+			driver, err = cockroachMigrate.WithInstance(sqlDb, &cockroachMigrate.Config{})
+			break
+		}
+
 		driver, err = postgresMigrate.WithInstance(sqlDb, &postgresMigrate.Config{})
 	default:
 		// Should never happen at this point
@@ -89,6 +101,15 @@ func newMigrationDriver(sqlDb *sql.DB, dbProvider common.DbProvider) (driver dat
 	}
 
 	return driver, nil
+}
+
+func isCockroachDB(sqlDb *sql.DB) (bool, error) {
+	var version string
+	if err := sqlDb.QueryRow("SELECT version()").Scan(&version); err != nil {
+		return false, err
+	}
+
+	return strings.Contains(strings.ToLower(version), "cockroachdb"), nil
 }
 
 // migrateDatabaseFromGitHub applies database migrations fetched from GitHub to handle downgrades.

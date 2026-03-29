@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"reflect"
 	"strings"
@@ -122,6 +123,13 @@ func (s *AppConfigService) updateAppConfigStartTransaction(ctx context.Context) 
 	// However, with Postgres we need to manually lock the table to prevent others from doing the same
 	switch s.db.Name() {
 	case "postgres":
+		isCockroach, detectErr := isCockroachDBTx(tx)
+		if detectErr != nil {
+			slog.Warn("Failed to detect database flavor via SELECT version(), defaulting to PostgreSQL lock behavior", slog.Any("error", detectErr))
+		}
+		if isCockroach {
+			break
+		}
 		// We do not use "NOWAIT" so this blocks until the database is available, or the context is canceled
 		// Here we use a context with a 10s timeout in case the database is blocked for longer
 		lockCtx, lockCancel := context.WithTimeout(ctx, 10*time.Second)
@@ -139,6 +147,15 @@ func (s *AppConfigService) updateAppConfigStartTransaction(ctx context.Context) 
 	}
 
 	return tx, nil
+}
+
+func isCockroachDBTx(tx *gorm.DB) (bool, error) {
+	var version string
+	if err := tx.Raw("SELECT version()").Scan(&version).Error; err != nil {
+		return false, err
+	}
+
+	return strings.Contains(strings.ToLower(version), "cockroachdb"), nil
 }
 
 func (s *AppConfigService) updateAppConfigUpdateDatabase(ctx context.Context, tx *gorm.DB, dbUpdate *[]model.AppConfigVariable) error {
