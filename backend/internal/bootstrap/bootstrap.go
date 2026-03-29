@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/pocket-id/pocket-id/backend/internal/common"
 	"github.com/pocket-id/pocket-id/backend/internal/job"
-	"github.com/pocket-id/pocket-id/backend/internal/service"
 	"github.com/pocket-id/pocket-id/backend/internal/storage"
 	"github.com/pocket-id/pocket-id/backend/internal/utils"
 )
@@ -61,27 +59,28 @@ func Bootstrap(ctx context.Context) error {
 		return fmt.Errorf("failed to initialize services: %w", err)
 	}
 
-	waitUntil, err := svc.appLockService.Acquire(ctx, false)
-	if errors.Is(err, service.ErrLockUnavailable) {
-		return errors.New("it appears that there's already one instance of Pocket ID running; running multiple replicas of Pocket ID is currently not supported")
-	} else if err != nil {
-		return fmt.Errorf("failed to acquire application lock: %w", err)
-	}
+	// Multiple replica support: application lock check removed
+	// waitUntil, err := svc.appLockService.Acquire(ctx, false)
+	// if errors.Is(err, service.ErrLockUnavailable) {
+	// 	return errors.New("it appears that there's already one instance of Pocket ID running; running multiple replicas of Pocket ID is currently not supported")
+	// } else if err != nil {
+	// 	return fmt.Errorf("failed to acquire application lock: %w", err)
+	// }
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(time.Until(waitUntil)):
-	}
+	// select {
+	// case <-ctx.Done():
+	// 	return ctx.Err()
+	// case <-time.After(time.Until(waitUntil)):
+	// }
 
-	shutdownFn := func(shutdownCtx context.Context) error {
-		sErr := svc.appLockService.Release(shutdownCtx)
-		if sErr != nil {
-			return fmt.Errorf("failed to release application lock: %w", sErr)
-		}
-		return nil
-	}
-	shutdownFns = append(shutdownFns, shutdownFn)
+	// shutdownFn := func(shutdownCtx context.Context) error {
+	// 	sErr := svc.appLockService.Release(shutdownCtx)
+	// 	if sErr != nil {
+	// 		return fmt.Errorf("failed to release application lock: %w", sErr)
+	// 	}
+	// 	return nil
+	// }
+	// shutdownFns = append(shutdownFns, shutdownFn)
 
 	// Register scheduled jobs
 	err = registerScheduledJobs(ctx, db, svc, httpClient, scheduler)
@@ -97,7 +96,7 @@ func Bootstrap(ctx context.Context) error {
 
 	// Run all background services
 	// This call blocks until the context is canceled
-	services := []utils.Service{svc.appLockService.RunRenewal, router}
+	services := []utils.Service{router}
 
 	if common.EnvConfig.AppEnv != "test" {
 		services = append(services, scheduler.Run)
