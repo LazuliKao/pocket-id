@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -105,7 +106,7 @@ func newMigrationDriver(sqlDb *sql.DB, dbProvider common.DbProvider) (driver dat
 
 func isCockroachDB(sqlDb *sql.DB) (bool, error) {
 	var version string
-	if err := sqlDb.QueryRow("SELECT version()").Scan(&version); err != nil {
+	if err := sqlDb.QueryRowContext(context.Background(), "SELECT version()").Scan(&version); err != nil {
 		return false, err
 	}
 
